@@ -71,8 +71,8 @@ git commit -m "feat: setup project structure for Vercel and Render deployment"
 # 4. Set default branch to main (if not already set)
 git branch -M main
 
-# 5. Link to your GitHub remote repository (Replace with your actual GitHub URL)
-git remote add origin https://github.com/YOUR_USERNAME/YOUR_REPO_NAME.git
+# 5. Link to your GitHub remote repository
+git remote add origin https://github.com/Callme-VR/Klyro.git
 
 # 6. Push to GitHub
 git push -u origin main
@@ -84,14 +84,8 @@ git push -u origin main
 
 You need a managed PostgreSQL database for Prisma (`packages/db`).
 
-### Option A: Render PostgreSQL (Recommended)
-1. Go to [Render Dashboard](https://dashboard.render.com/) and click **New +** → **PostgreSQL**.
-2. Set a **Name** (e.g., `trello-db`) and select a **Region**.
-3. Click **Create Database**.
-4. Once provisioned, copy the **Internal Database URL** (for services hosted on Render) or **External Database URL** (for local CLI/Vercel).
-
-### Option B: Neon / Supabase / Aiven
-1. Create a PostgreSQL instance on [Neon](https://neon.tech) or [Supabase](https://supabase.com).
+### Option A: Render PostgreSQL / Neon / Supabase (Recommended)
+1. Create a PostgreSQL instance on [Neon](https://neon.tech), [Render](https://render.com), or [Supabase](https://supabase.com).
 2. Copy the connection string format:
    ```env
    DATABASE_URL="postgresql://user:password@ep-host.pooler.region.aws.neon.tech/dbname?sslmode=require"
@@ -102,7 +96,7 @@ To sync your Prisma schema to your remote PostgreSQL database:
 
 ```bash
 cd packages/db
-npx prisma db push
+bun db:push
 ```
 
 ---
@@ -116,10 +110,10 @@ You will deploy **two separate Web Services** on Render: `Backend` and `websocke
 ### Service 3.1: Deploy Express API (`apps/Backend`)
 
 1. Go to [Render Dashboard](https://dashboard.render.com/) → **New +** → **Web Service**.
-2. Connect your GitHub repository.
+2. Connect your GitHub repository: `Callme-VR/Klyro`.
 3. Configure the service settings:
-   - **Name**: `trello-backend-api`
-   - **Region**: Choose same region as PostgreSQL.
+   - **Name**: `klyro-backend-api`
+   - **Region**: Choose same region as PostgreSQL (e.g. Singapore / US East).
    - **Branch**: `main`
    - **Root Directory**: `trello` *(or leave blank if `package.json` is at repo root)*
    - **Runtime**: `Node` (or `Bun`)
@@ -144,16 +138,16 @@ You will deploy **two separate Web Services** on Render: `Backend` and `websocke
    | `PORT` | `10000` *(Auto-assigned by Render)* | Port bound automatically |
 
 5. Click **Create Web Service**. Note your deployment URL:
-   `https://trello-backend-api.onrender.com`
+   `https://klyro-backend-api.onrender.com`
 
 ---
 
 ### Service 3.2: Deploy WebSockets Server (`apps/websockets`)
 
 1. Click **New +** → **Web Service** in Render.
-2. Select your GitHub repository.
+2. Select your GitHub repository: `Callme-VR/Klyro`.
 3. Configure settings:
-   - **Name**: `trello-websockets`
+   - **Name**: `klyro-websockets`
    - **Region**: Same region as PostgreSQL & Backend API.
    - **Branch**: `main`
    - **Root Directory**: `trello`
@@ -166,6 +160,8 @@ You will deploy **two separate Web Services** on Render: `Backend` and `websocke
      ```bash
      bun apps/websockets/index.ts
      ```
+   - **Build Filter / Included Paths** *(Advanced)*:
+     `apps/websockets/**, packages/db/**`
 
 4. Add **Environment Variables**:
    | Key | Value | Description |
@@ -174,7 +170,7 @@ You will deploy **two separate Web Services** on Render: `Backend` and `websocke
    | `DATABASE_URL` | `postgresql://...` | Connection string |
 
 5. Click **Create Web Service**. Note your WebSocket service URL:
-   `https://trello-websockets.onrender.com` (WebSocket endpoint will be `wss://trello-websockets.onrender.com`).
+   `wss://klyro-websockets.onrender.com`
 
 ---
 
