@@ -176,18 +176,18 @@ You will deploy **two separate Web Services** on Render: `Backend` and `websocke
 
 ## ⚡ Step 4: Deploying Next.js Frontend (`apps/frentend`) on Vercel
 
-1. Go to [Vercel Dashboard](https://vercel.com/new) and import your GitHub repository.
+1. Go to [Vercel Dashboard](https://vercel.com/new) and import your GitHub repository: `Callme-VR/Klyro`.
 2. Select your repository and configure project settings:
    - **Framework Preset**: `Next.js`
-   - **Root Directory**: `trello/apps/frentend` *(Click Edit and select `apps/frentend` inside the monorepo directory)*
+   - **Root Directory**: `apps/frentend` *(Click Edit and select `apps/frentend`)*
    - **Build Command**: `cd ../.. && bun install && turbo run build --filter=frentend`
    - **Install Command**: `bun install`
 
 3. Expand **Environment Variables** and add:
    | Key | Value | Notes |
    | :--- | :--- | :--- |
-   | `NEXT_PUBLIC_API_URL` | `https://trello-backend-api.onrender.com/api/v1` | Points to Render Backend API |
-   | `NEXT_PUBLIC_WS_URL` | `wss://trello-websockets.onrender.com` | Points to Render WebSocket Server |
+   | `NEXT_PUBLIC_API_URL` | `https://klyro-backend-api.onrender.com/api/v1` | Points to Render Backend API |
+   | `NEXT_PUBLIC_WS_URL` | `wss://klyro-websockets.onrender.com` | Points to Render WebSocket Server |
 
 4. Click **Deploy**. Vercel will build and assign your domain:
    `https://your-app-name.vercel.app`
