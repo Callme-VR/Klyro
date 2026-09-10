@@ -281,9 +281,9 @@ async function main() {
 
     logger.info("Database connected successfully");
 
-    server.listen(PORT, () => {
+    server.listen(PORT, "0.0.0.0", () => {
       logger.info(
-        `WebSocket server successfully serving on ws://localhost:${PORT} (dual-stack IPv4/IPv6)`,
+        `WebSocket server successfully serving on ws://0.0.0.0:${PORT} (dual-stack IPv4/IPv6)`,
       );
     });
   } catch (error: any) {

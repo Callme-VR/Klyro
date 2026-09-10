@@ -39,9 +39,9 @@ app.get("/", (req, res) => {
 });
 
 // 4. Start Server and Verify Database Connectivity
-app.listen(port, async () => {
+app.listen(port, "0.0.0.0", async () => {
   logger.info(
-    `Backend server successfully listening on http://localhost:${port}`,
+    `Backend server successfully listening on http://0.0.0.0:${port}`,
   );
 
   try {
