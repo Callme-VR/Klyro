@@ -10,10 +10,10 @@
   },
   "scripts": {
     "start": "bun index.ts",
-    "db:generate": "prisma generate",
-    "db:push": "prisma db push",
-    "db:migrate": "prisma migrate dev",
-    "db:studio": "prisma studio"
+    "db:generate": "bunx prisma generate",
+    "db:push": "bunx prisma db push",
+    "db:migrate": "bunx prisma migrate dev",
+    "db:studio": "bunx prisma studio"
   },
   "devDependencies": {
     "@types/bun": "latest",
