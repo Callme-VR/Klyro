@@ -31,7 +31,7 @@ export default function SignupPage() {
     try {
       await signup(data);
       toast.success("Account created successfully!");
-      router.push("/organizations");
+      window.location.href = "/organizations";
     } catch (err) {
       if (err instanceof ApiError) {
         toast.error(err.message);

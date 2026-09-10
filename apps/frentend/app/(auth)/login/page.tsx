@@ -31,7 +31,7 @@ export default function LoginPage() {
     try {
       await login(data);
       toast.success("Signed in successfully!");
-      router.push("/organizations");
+      window.location.href = "/organizations";
     } catch (err) {
       if (err instanceof ApiError) {
         toast.error(err.message);
