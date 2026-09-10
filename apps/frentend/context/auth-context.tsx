@@ -32,7 +32,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       try {
         setTokenState(storedToken);
-        const { user: currentUser } = await getMeApi();
+        const currentUser = await getMeApi();
         setUser(currentUser);
       } catch (error) {
         console.warn("Session token invalid or expired, clearing session:", error);

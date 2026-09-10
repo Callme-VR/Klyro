@@ -37,8 +37,8 @@ export async function signinApi(payload: signinPayload): Promise<AuthSession> {
 /**
  * Fetch profile of currently authenticated user
  */
-export async function getMeApi(): Promise<{ user: User }> {
-  return apiClient<{ user: User }>("/auth/me", {
+export async function getMeApi(): Promise<User> {
+  return apiClient<User>("/auth/me", {
     method: "GET",
     requiresAuth: true,
   });
