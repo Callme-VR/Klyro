@@ -126,7 +126,9 @@ You will deploy **two separate Web Services** on Render: `Backend` and `websocke
      bun apps/Backend/src/index.ts
      ```
    - **Build Filter / Included Paths** *(Advanced)*:
-     `apps/Backend/**, packages/db/**` *(tells Render to only rebuild this service when backend or database code changes)*
+     * Add 1st Included Path: `apps/Backend/**`
+     * Click **+ Add Included Path** and add 2nd Path: `packages/db/**`
+     *(tells Render to only rebuild this service when backend or database code changes)*
    - **Instance Type**: Free or Starter.
 
 4. Add **Environment Variables** in Render Dashboard:
@@ -161,7 +163,8 @@ You will deploy **two separate Web Services** on Render: `Backend` and `websocke
      bun apps/websockets/index.ts
      ```
    - **Build Filter / Included Paths** *(Advanced)*:
-     `apps/websockets/**, packages/db/**`
+     * Add 1st Included Path: `apps/websockets/**`
+     * Click **+ Add Included Path** and add 2nd Path: `packages/db/**`
 
 4. Add **Environment Variables**:
    | Key | Value | Description |
