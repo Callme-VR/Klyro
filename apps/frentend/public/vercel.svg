@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1000" width="100%" height="100%">
+  <g fill="#FF3E00">
+    <!-- Left vertical stem (pill/capsule) -->
+    <rect x="250" y="240" width="212" height="520" rx="106" ry="106" />
+
+    <!-- Top-right arm -->
+    <path d="M 480,412 
+             L 480,554 
+             A 6,6 0 0 0 488,560 
+             L 636,412 
+             A 75,75 0 0 0 636,306 
+             L 616,286 
+             A 75,75 0 0 0 510,286 
+             L 482,314 
+             A 60,60 0 0 0 480,356 
+             Z" />
+
+    <!-- Bottom-right arm (angled rounded capsule) -->
+    <rect x="520" y="475" width="180" height="300" rx="90" ry="90" transform="rotate(-45 610 625)" />
+  </g>
+</svg>

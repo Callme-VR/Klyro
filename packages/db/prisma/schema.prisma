@@ -1,0 +1,227 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ==============================
+// ENUMS
+// ==============================
+
+enum Role {
+  OWNER
+  MEMBER
+  ADMIN
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+}
+
+// ==============================
+// USER
+// ==============================
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  name         String?
+  passwordHash String
+  avatarUrl    String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relations
+  comments       Comment[]
+  createdBoards  Board[]
+  sentInvites    OrganizationInvite[] @relation("InviterRelation")
+  assignedIssues IssueAssignee[]
+  memberships    OrganizationMember[]
+
+  @@index([email])
+  @@map("users")
+}
+
+// ==============================
+// ORGANIZATION
+// ==============================
+
+model Organization {
+  id          String   @id @default(uuid())
+  name        String
+  slug        String   @unique
+  description String?
+  avatarUrl   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  members OrganizationMember[]
+  boards  Board[]
+  invites OrganizationInvite[]
+
+  @@index([slug])
+  @@map("organizations")
+}
+
+// ==============================
+// ORGANIZATION MEMBER
+// ==============================
+
+model OrganizationMember {
+  id             String   @id @default(uuid())
+  userId         String
+  organizationId String
+  role           Role     @default(MEMBER)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  // Relations
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  // Prevent duplicate membership
+  @@unique([userId, organizationId])
+  @@index([userId])
+  @@index([organizationId])
+  @@map("organization_members")
+}
+
+// ==============================
+// ORGANIZATION INVITE
+// ==============================
+
+model OrganizationInvite {
+  id             String           @id @default(uuid())
+  email          String
+  organizationId String
+  inviterId      String
+  status         InvitationStatus @default(PENDING)
+  token          String           @unique
+  expiresAt      DateTime
+  createdAt      DateTime         @default(now())
+
+  // Relations
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  inviter      User         @relation("InviterRelation", fields: [inviterId], references: [id], onDelete: Cascade)
+
+  @@index([email])
+  @@index([organizationId])
+  @@index([inviterId])
+  @@index([token])
+  @@map("organization_invites")
+}
+
+// ==============================
+// BOARD
+// ==============================
+
+model Board {
+  id              String   @id @default(uuid())
+  title           String
+  backgroundColor String
+  isClosed        Boolean  @default(false)
+  organizationId  String
+  creatorId       String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  creator      User         @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+
+  sections Section[]
+
+  @@index([organizationId])
+  @@index([creatorId])
+  @@map("boards")
+}
+
+// ==============================
+// SECTION
+// ==============================
+
+model Section {
+  id        String   @id @default(ulid())
+  title     String
+  order     Float
+  boardId   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  board  Board   @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  issues Issue[]
+
+  @@index([boardId, order])
+  @@map("sections")
+}
+
+// ==============================
+// ISSUE
+// ==============================
+
+model Issue {
+  id          String    @id @default(ulid())
+  title       String
+  description String?   @db.Text
+  order       Float
+  dueDate     DateTime?
+  sectionId   String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  // Relations
+  section   Section         @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  assignees IssueAssignee[]
+  comments  Comment[]
+
+  @@index([sectionId, order])
+  @@map("issues")
+}
+
+// ==============================
+// ISSUE ASSIGNEE
+// ==============================
+
+model IssueAssignee {
+  id      String @id @default(uuid())
+  issueId String
+  userId  String
+
+  // Relations
+  issue Issue @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Prevent duplicate assignments
+  @@unique([issueId, userId])
+  @@index([issueId])
+  @@index([userId])
+  @@map("issue_assignees")
+}
+
+// ==============================
+// COMMENT
+// ==============================
+
+model Comment {
+  id        String   @id @default(uuid())
+  content   String   @db.Text
+  issueId   String
+  userId    String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  issue Issue @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([issueId])
+  @@index([userId])
+  @@map("comments")
+}
