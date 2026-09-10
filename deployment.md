@@ -115,7 +115,7 @@ You will deploy **two separate Web Services** on Render: `Backend` and `websocke
    - **Name**: `klyro-backend-api`
    - **Region**: Choose same region as PostgreSQL (e.g. Singapore / US East).
    - **Branch**: `main`
-   - **Root Directory**: `trello` *(or leave blank if `package.json` is at repo root)*
+   - **Root Directory**: *(Leave blank)*
    - **Runtime**: `Node` (or `Bun`)
    - **Build Command**:
      ```bash
@@ -150,7 +150,7 @@ You will deploy **two separate Web Services** on Render: `Backend` and `websocke
    - **Name**: `klyro-websockets`
    - **Region**: Same region as PostgreSQL & Backend API.
    - **Branch**: `main`
-   - **Root Directory**: `trello`
+   - **Root Directory**: *(Leave blank)*
    - **Runtime**: `Node` (or `Bun`)
    - **Build Command**:
      ```bash
