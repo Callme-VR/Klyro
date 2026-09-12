@@ -61,6 +61,10 @@ export default function UseBoardSocketConnections(boardId: string) {
       }
     }
 
+    if (socketUrl) {
+      socketUrl = socketUrl.replace(/^http:\/\//, "ws://").replace(/^https:\/\//, "wss://");
+    }
+
     // Security check: HTTPS pages strictly require wss:// to avoid browser Mixed Content errors
     if (typeof window !== "undefined" && window.location.protocol === "https:") {
       socketUrl = socketUrl.replace(/^ws:\/\//, "wss://");
