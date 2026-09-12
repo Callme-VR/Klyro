@@ -66,16 +66,19 @@ export default function UseBoardSocketConnections(boardId: string) {
       socketUrl = socketUrl.replace(/^ws:\/\//, "wss://");
     }
 
-    try {
-      const socket = new WebSocket(socketUrl);
-      socketRef.current = socket;
+    let socket: WebSocket | null = null;
 
-      socket.onopen = () => {
-        if (socketRef.current !== socket) return;
+    try {
+      const socketInstance = new WebSocket(socketUrl);
+      socket = socketInstance;
+      socketRef.current = socketInstance;
+
+      socketInstance.onopen = () => {
+        if (socketRef.current !== socketInstance) return;
 
         setConnected(true);
 
-        socket.send(
+        socketInstance.send(
           JSON.stringify({
             type: "JOIN_BOARD",
             boardid: boardId.trim(),
@@ -83,8 +86,8 @@ export default function UseBoardSocketConnections(boardId: string) {
         );
       };
 
-      socket.onmessage = (event) => {
-        if (socketRef.current !== socket) return;
+      socketInstance.onmessage = (event) => {
+        if (socketRef.current !== socketInstance) return;
 
         try {
           const data: SocketMessage = JSON.parse(event.data);
@@ -116,15 +119,15 @@ export default function UseBoardSocketConnections(boardId: string) {
         }
       };
 
-      socket.onclose = () => {
-        if (socketRef.current !== socket) return;
+      socketInstance.onclose = () => {
+        if (socketRef.current !== socketInstance) return;
         setConnected(false);
         setOnlineUsers([]);
         setCurrentUserId(null);
       };
 
-      socket.onerror = () => {
-        if (socketRef.current !== socket) return;
+      socketInstance.onerror = () => {
+        if (socketRef.current !== socketInstance) return;
         setError(`Unable to connect to WebSocket server at ${socketUrl}`);
         setConnected(false);
       };
@@ -135,7 +138,7 @@ export default function UseBoardSocketConnections(boardId: string) {
     }
 
     return () => {
-      if (socketRef.current === socket) {
+      if (socket && socketRef.current === socket) {
         socket.onclose = null;
         socket.onerror = null;
         socket.close();
