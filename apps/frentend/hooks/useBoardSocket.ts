@@ -44,73 +44,95 @@ export default function UseBoardSocketConnections(boardId: string) {
       socketRef.current = null;
     }
 
-    const host =
-      typeof window !== "undefined" && window.location.hostname
-        ? window.location.hostname
-        : "localhost";
+    let socketUrl = process.env.NEXT_PUBLIC_WS_URL;
 
-    const socketUrl = `ws://${host}:6001`;
-    const socket = new WebSocket(socketUrl);
+    if (!socketUrl) {
+      if (typeof window !== "undefined") {
+        const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+        const host = window.location.hostname;
 
-    socketRef.current = socket;
-
-    socket.onopen = () => {
-      if (socketRef.current !== socket) return;
-
-      setConnected(true);
-
-      socket.send(
-        JSON.stringify({
-          type: "JOIN_BOARD",
-          boardid: boardId.trim(),
-        })
-      );
-    };
-
-    socket.onmessage = (event) => {
-      if (socketRef.current !== socket) return;
-
-      try {
-        const data: SocketMessage = JSON.parse(event.data);
-
-        if (data.type === "INIT_STATE") {
-          setCurrentUserId(data.userId);
-          setOnlineUsers(data.users.map((id) => ({ userId: id })));
+        if (host === "localhost" || host === "127.0.0.1") {
+          socketUrl = `${protocol}//${host}:6001`;
+        } else {
+          socketUrl = `${protocol}//${host}`;
         }
-
-        if (data.type === "USER_JOINED") {
-          setOnlineUsers((prev) => {
-            if (prev.some((u) => u.userId === data.userId)) return prev;
-
-            return [...prev, { userId: data.userId }];
-          });
-        }
-
-        if (data.type === "USER_LEAVE") {
-          setOnlineUsers((prev) =>
-            prev.filter((u) => u.userId !== data.userId)
-          );
-        }
-
-        if (data.type === "ERROR") {
-          setError(data.message);
-        }
-      } catch (error) {
-        console.error("Invalid WebSocket message:", error);
+      } else {
+        socketUrl = "ws://localhost:6001";
       }
-    };
-
-    socket.onclose = () => {
-      if (socketRef.current !== socket) return;
-      setConnected(false);
-      setOnlineUsers([]);
-      setCurrentUserId(null);
     }
-    socket.onerror = () => {
-      if (socketRef.current !== socket) return;
+
+    // Security check: HTTPS pages strictly require wss:// to avoid browser Mixed Content errors
+    if (typeof window !== "undefined" && window.location.protocol === "https:") {
+      socketUrl = socketUrl.replace(/^ws:\/\//, "wss://");
+    }
+
+    try {
+      const socket = new WebSocket(socketUrl);
+      socketRef.current = socket;
+
+      socket.onopen = () => {
+        if (socketRef.current !== socket) return;
+
+        setConnected(true);
+
+        socket.send(
+          JSON.stringify({
+            type: "JOIN_BOARD",
+            boardid: boardId.trim(),
+          })
+        );
+      };
+
+      socket.onmessage = (event) => {
+        if (socketRef.current !== socket) return;
+
+        try {
+          const data: SocketMessage = JSON.parse(event.data);
+
+          if (data.type === "INIT_STATE") {
+            setCurrentUserId(data.userId);
+            setOnlineUsers(data.users.map((id) => ({ userId: id })));
+          }
+
+          if (data.type === "USER_JOINED") {
+            setOnlineUsers((prev) => {
+              if (prev.some((u) => u.userId === data.userId)) return prev;
+
+              return [...prev, { userId: data.userId }];
+            });
+          }
+
+          if (data.type === "USER_LEAVE") {
+            setOnlineUsers((prev) =>
+              prev.filter((u) => u.userId !== data.userId)
+            );
+          }
+
+          if (data.type === "ERROR") {
+            setError(data.message);
+          }
+        } catch (error) {
+          console.error("Invalid WebSocket message:", error);
+        }
+      };
+
+      socket.onclose = () => {
+        if (socketRef.current !== socket) return;
+        setConnected(false);
+        setOnlineUsers([]);
+        setCurrentUserId(null);
+      };
+
+      socket.onerror = () => {
+        if (socketRef.current !== socket) return;
+        setError(`Unable to connect to WebSocket server at ${socketUrl}`);
+        setConnected(false);
+      };
+    } catch (err) {
+      console.error("Failed to construct WebSocket:", err);
       setError(`Unable to connect to WebSocket server at ${socketUrl}`);
       setConnected(false);
-    };
+    }
 
     return () => {
       if (socketRef.current === socket) {
