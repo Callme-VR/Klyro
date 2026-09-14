@@ -1,34 +1,39 @@
 
-const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || "";
-const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || "";
-const GOOGLE_CALLBACK_URL =
-  process.env.GOOGLE_CALLBACK_URL || "http://localhost:5500/api/auth/google/callback";
+function getGoogleConfig() {
+  const clientId = process.env.GOOGLE_CLIENT_ID || "";
+  const clientSecret = process.env.GOOGLE_CLIENT_SECRET || "";
+  const callbackUrl =
+    process.env.GOOGLE_CALLBACK_URL || "http://localhost:8000/api/v1/auth/google/callback";
 
+  return { clientId, clientSecret, callbackUrl };
+}
 
 export function GetGoogleAuthUrl() {
+  const { clientId, callbackUrl } = getGoogleConfig();
   const rootUrl = "https://accounts.google.com/o/oauth2/v2/auth";
   const options = {
-    redirect_uri: GOOGLE_CALLBACK_URL,
-    client_id: GOOGLE_CLIENT_ID,
+    redirect_uri: callbackUrl,
+    client_id: clientId,
     access_type: "offline",
     response_type: "code",
     prompt: "consent",
     scope: [
       "https://www.googleapis.com/auth/userinfo.email",
       "https://www.googleapis.com/auth/userinfo.profile",
-    ].join(" ")
+    ].join(" "),
   };
   const qs = new URLSearchParams(options);
   return `${rootUrl}?${qs.toString()}`;
 }
 
 export async function getGoogleUser(code: string) {
+  const { clientId, clientSecret, callbackUrl } = getGoogleConfig();
   const url = "https://oauth2.googleapis.com/token";
   const values = {
     code,
-    client_id: GOOGLE_CLIENT_ID,
-    client_secret: GOOGLE_CLIENT_SECRET,
-    redirect_uri: GOOGLE_CALLBACK_URL,
+    client_id: clientId,
+    client_secret: clientSecret,
+    redirect_uri: callbackUrl,
     grant_type: "authorization_code",
   };
   const tokenres = await fetch(url, {
@@ -37,7 +42,7 @@ export async function getGoogleUser(code: string) {
       "content-type": "application/x-www-form-urlencoded",
     },
     body: new URLSearchParams(values),
-  })
+  });
   const tokenData = (await tokenres.json()) as any;
 
   if (!tokenres.ok || !tokenData.access_token) {
@@ -51,6 +56,4 @@ export async function getGoogleUser(code: string) {
   );
   const googleUser = (await userRes.json()) as any;
   return googleUser; // Returns { id, email, name, picture }
-
-
 }
