@@ -100,3 +100,34 @@ export const GetMe = async (req: AuthenticatedRequest, res: Response) => {
     });
   }
 };
+
+// Initiate Google OAuth Redirect
+export const GoogleRedirect = async (_req: Request, res: Response) => {
+  const { GetGoogleAuthUrl } = await import("../utils/googleAuthProvider");
+  const url = GetGoogleAuthUrl();
+  return res.redirect(url);
+};
+
+// Handle Google OAuth Callback
+export const GoogleCallback = async (req: Request, res: Response) => {
+  const code = req.query.code as string;
+  const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:3000";
+
+  if (!code) {
+    return res.redirect(`${FRONTEND_URL}/login?error=GoogleAuthFailed`);
+  }
+
+  try {
+    const { getGoogleUser } = await import("../utils/googleAuthProvider");
+    const { handleGoogleauthservice } = await import("../services/auth.service");
+
+    const googleUser = await getGoogleUser(code);
+    const { token } = await handleGoogleauthservice(googleUser);
+
+    return res.redirect(`${FRONTEND_URL}/login?token=${encodeURIComponent(token)}`);
+  } catch (error: any) {
+    return res.redirect(
+      `${FRONTEND_URL}/login?error=${encodeURIComponent(error.message || "GoogleAuthFailed")}`
+    );
+  }
+};

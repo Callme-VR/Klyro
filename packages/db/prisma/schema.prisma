@@ -17,6 +17,11 @@ enum Role {
   ADMIN
 }
 
+enum AuthProvider {
+  LOCAL
+  GOOGLE
+}
+
 enum InvitationStatus {
   PENDING
   ACCEPTED
@@ -28,13 +33,16 @@ enum InvitationStatus {
 // ==============================
 
 model User {
-  id           String   @id @default(uuid())
-  email        String   @unique
+  id           String       @id @default(uuid())
+  email        String       @unique
   name         String?
-  passwordHash String
+  passwordHash String?
+  provider     AuthProvider @default(LOCAL)
+  providerId   String?      @unique
   avatarUrl    String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  verified     Boolean      @default(false)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
 
   // Relations
   comments       Comment[]

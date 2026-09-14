@@ -1,11 +1,13 @@
 import { prisma } from "db/client";
 import type { CreateIssueInput, UpdateIssueInput } from "../models/issue.Schemas";
+import { redis } from "../utils/redis";
 
 const verifySectionAccess = async (userId: string, sectionId: string) => {
   const section = await prisma.section.findUnique({
     where: { id: sectionId },
     select: {
       id: true,
+      boardId: true,
       board: { select: { id: true, organizationId: true } },
     },
   });
@@ -37,6 +39,7 @@ const verifyIssueAccess = async (userId: string, issueId: string) => {
       section: {
         select: {
           id: true,
+          boardId: true,
           board: { select: { id: true, organizationId: true } },
         },
       },
@@ -69,7 +72,7 @@ export const createIssueService = async (
   sectionId: string,
   input: CreateIssueInput
 ) => {
-  await verifySectionAccess(userId, sectionId);
+  const section = await verifySectionAccess(userId, sectionId);
 
   let issueOrder = input.order;
   if (issueOrder === undefined) {
@@ -102,6 +105,9 @@ export const createIssueService = async (
       },
     },
   });
+
+  // Invalidate Redis board cache
+  await redis.del(`board:${section.boardId}`);
 
   return issue;
 };
@@ -193,12 +199,20 @@ export const updateIssueService = async (
     },
   });
 
+  // Invalidate Redis board cache
+  await redis.del(`board:${currentIssue.section.boardId}`);
+
   return updatedIssue;
 };
 
 export const deleteIssueService = async (userId: string, issueId: string) => {
-  await verifyIssueAccess(userId, issueId);
+  const issue = await verifyIssueAccess(userId, issueId);
+
   await prisma.issue.delete({ where: { id: issueId } });
+
+  // Invalidate Redis board cache
+  await redis.del(`board:${issue.section.boardId}`);
+
   return { message: "Issue deleted successfully" };
 };
 
@@ -247,6 +261,9 @@ export const addIssueAssigneeService = async (
     },
   });
 
+  // Invalidate Redis board cache
+  await redis.del(`board:${issue.section.boardId}`);
+
   return assignment;
 };
 
@@ -255,7 +272,7 @@ export const removeIssueAssigneeService = async (
   issueId: string,
   assigneeUserId: string
 ) => {
-  await verifyIssueAccess(userId, issueId);
+  const issue = await verifyIssueAccess(userId, issueId);
 
   const existingAssignment = await prisma.issueAssignee.findUnique({
     where: {
@@ -273,6 +290,9 @@ export const removeIssueAssigneeService = async (
       issueId_userId: { issueId, userId: assigneeUserId },
     },
   });
+
+  // Invalidate Redis board cache
+  await redis.del(`board:${issue.section.boardId}`);
 
   return { message: "Assignee removed successfully" };
 };

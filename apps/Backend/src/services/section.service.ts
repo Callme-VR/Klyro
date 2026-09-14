@@ -1,5 +1,6 @@
 import { prisma } from "db/client";
 import type { CreateSectionInput, UpdateSectionInput } from "../models/section.Schemas";
+import { redis } from "../utils/redis";
 
 // ============================================================
 // Verify Board Access
@@ -83,6 +84,9 @@ export const createSectionService = async (
       boardId,
     },
   });
+
+  // Invalidate Redis board cache
+  await redis.del(`board:${boardId}`);
 
   return section;
 };
@@ -181,6 +185,9 @@ export const updateSectionService = async (
     },
   });
 
+  // Invalidate Redis board cache
+  await redis.del(`board:${section.boardId}`);
+
   return updatedSection;
 };
 
@@ -219,6 +226,9 @@ export const deleteSectionService = async (
       id: sectionId,
     },
   });
+
+  // Invalidate Redis board cache
+  await redis.del(`board:${section.boardId}`);
 
   return {
     message: "Section deleted successfully",

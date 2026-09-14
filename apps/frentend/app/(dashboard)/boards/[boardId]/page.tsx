@@ -101,14 +101,13 @@ export default function BoardCanvasPage() {
 
       const updatedSections = Array.from(board.sections);
       const [movedSection] = updatedSections.splice(source.index, 1);
+      movedSection.order = newOrder;
       updatedSections.splice(destination.index, 0, movedSection);
 
-      // Optimistic UI Update
+      // Optimistic UI Update (0ms latency)
       setBoard({
         ...board,
-        sections: updatedSections.map((sec) =>
-          sec.id === draggableId ? { ...sec, order: newOrder } : sec
-        ),
+        sections: updatedSections,
       });
 
       try {
@@ -138,14 +137,15 @@ export default function BoardCanvasPage() {
 
     // Update target section ID if moved across columns
     movedIssue.sectionId = destination.droppableId;
-    destIssues.splice(destination.index, 0, movedIssue);
 
     const newOrder = calculateNewOrder(
-      destIssues.filter((i) => i.id !== draggableId),
+      destIssues,
       destination.index
     );
+    movedIssue.order = newOrder;
+    destIssues.splice(destination.index, 0, movedIssue);
 
-    // Optimistic Local State Update
+    // Optimistic Local State Update (0ms latency)
     const newSections = board.sections.map((sec) => {
       if (sec.id === source.droppableId && source.droppableId === destination.droppableId) {
         return { ...sec, issues: destIssues };
@@ -172,54 +172,153 @@ export default function BoardCanvasPage() {
     }
   };
 
+  // 1. Optimistic Section Creation
   const handleCreateSection = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newSectionTitle.trim()) return;
+    if (!newSectionTitle.trim() || !board) return;
+
+    const tempId = `temp-section-${Date.now()}`;
+    const title = newSectionTitle.trim();
+    setNewSectionTitle("");
+    setIsAddingSection(false);
+
+    const tempSection: Section = {
+      id: tempId,
+      title,
+      order: calculateNewOrder(board.sections || [], (board.sections?.length || 0)),
+      boardId,
+      issues: [],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    // Render immediately in UI (0ms)
+    setBoard({
+      ...board,
+      sections: [...(board.sections || []), tempSection],
+    });
 
     try {
-      await createSectionApi(boardId, { title: newSectionTitle.trim() });
+      const createdSection = await createSectionApi(boardId, { title });
+      // Replace temp ID with real database ID
+      setBoard((prev) =>
+        prev
+          ? {
+            ...prev,
+            sections: (prev.sections || []).map((s) =>
+              s.id === tempId ? createdSection : s
+            ),
+          }
+          : null
+      );
       toast.success("List added");
-      setNewSectionTitle("");
-      setIsAddingSection(false);
-      fetchBoard();
     } catch (err: any) {
       toast.error(err.message || "Failed to add list");
+      fetchBoard(); // Rollback on error
     }
   };
 
+  // 2. Optimistic Section Deletion
   const handleDeleteSection = async (sectionId: string) => {
-    if (!window.confirm("Delete this column and all its issues?")) return;
+    if (!window.confirm("Delete this column and all its issues?") || !board) return;
+
+    // Remove from UI immediately (0ms)
+    setBoard({
+      ...board,
+      sections: (board.sections || []).filter((s) => s.id !== sectionId),
+    });
+
     try {
       await deleteSectionApi(sectionId);
       toast.success("List deleted");
-      fetchBoard();
     } catch (err: any) {
       toast.error(err.message || "Failed to delete list");
+      fetchBoard(); // Rollback on error
     }
   };
 
+  // 3. Optimistic Issue (Card) Creation
   const handleCreateIssue = async (e: React.FormEvent, sectionId: string) => {
     e.preventDefault();
-    if (!newIssueTitle.trim()) return;
+    if (!newIssueTitle.trim() || !board) return;
+
+    const tempId = `temp-issue-${Date.now()}`;
+    const title = newIssueTitle.trim();
+    setNewIssueTitle("");
+    setActiveSectionId(null);
+
+    const section = (board.sections || []).find((s) => s.id === sectionId);
+    if (!section) return;
+
+    const tempIssue: Issue = {
+      id: tempId,
+      title,
+      description: null,
+      order: calculateNewOrder(section.issues || [], (section.issues?.length || 0)),
+      dueDate: null,
+      sectionId,
+      assignees: [],
+      _count: { comments: 0 },
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    // Render card immediately in UI (0ms)
+    setBoard({
+      ...board,
+      sections: (board.sections || []).map((sec) =>
+        sec.id === sectionId
+          ? { ...sec, issues: [...(sec.issues || []), tempIssue] }
+          : sec
+      ),
+    });
 
     try {
-      await createIssueApi(sectionId, { title: newIssueTitle.trim() });
+      const createdIssue = await createIssueApi(sectionId, { title });
+      // Replace temp ID with real database ID
+      setBoard((prev) =>
+        prev
+          ? {
+            ...prev,
+            sections: (prev.sections || []).map((sec) =>
+              sec.id === sectionId
+                ? {
+                  ...sec,
+                  issues: (sec.issues || []).map((i) =>
+                    i.id === tempId ? createdIssue : i
+                  ),
+                }
+                : sec
+            ),
+          }
+          : null
+      );
       toast.success("Card added");
-      setNewIssueTitle("");
-      setActiveSectionId(null);
-      fetchBoard();
     } catch (err: any) {
       toast.error(err.message || "Failed to add card");
+      fetchBoard(); // Rollback on error
     }
   };
 
+  // 4. Optimistic Issue (Card) Deletion
   const handleDeleteIssue = async (issueId: string) => {
+    if (!board) return;
+
+    // Remove card from UI immediately (0ms)
+    setBoard({
+      ...board,
+      sections: (board.sections || []).map((sec) => ({
+        ...sec,
+        issues: (sec.issues || []).filter((i) => i.id !== issueId),
+      })),
+    });
+
     try {
       await deleteIssueApi(issueId);
       toast.success("Card deleted");
-      fetchBoard();
     } catch (err: any) {
       toast.error(err.message || "Failed to delete card");
+      fetchBoard(); // Rollback on error
     }
   };
 

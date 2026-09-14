@@ -1,5 +1,6 @@
 import { prisma } from "db/client";
 import type { CreateBoardInput, UpdateBoardInput } from "../models/board.Schemas";
+import { redis } from "../utils/redis";
 
 const verifyMembership = async (userId: string, organizationId: string) => {
   const membership = await prisma.organizationMember.findUnique({
@@ -108,7 +109,20 @@ export const getBoardService = async (userId: string, orgId?: string) => {
   });
 };
 
+
+
 export const getBoardByIdService = async (userId: string, boardId: string) => {
+
+  const cacheKey = `board:${boardId}`;
+  const cacheboard = await redis.get(cacheKey);
+  if (cacheboard) {
+    const parsedBoard = JSON.parse(cacheboard);
+    // verify user memebship before returning cached data
+    await verifyMembership(userId, parsedBoard.organizationId);
+    return parsedBoard;
+  }
+  // 2. Cache miss: Query PostgreSQL database
+
   const board = await prisma.board.findUnique({
     where: { id: boardId },
     include: {
@@ -164,6 +178,8 @@ export const getBoardByIdService = async (userId: string, boardId: string) => {
   // Check if user is a member of the organization that owns this board
   await verifyMembership(userId, board.organizationId);
 
+  await redis.setex(cacheKey, 300, JSON.stringify(board));
+
   return board;
 };
 
@@ -183,8 +199,10 @@ export const updateBoardService = async (
   }
 
   await verifyMembership(userId, board.organizationId);
+  await redis.del(`board:${boardId}`);
 
   const updatedBoard = await prisma.board.update({
+
     where: { id: boardId },
     data: {
       ...(input.title !== undefined && { title: input.title }),
@@ -207,6 +225,8 @@ export const updateBoardService = async (
 };
 
 export const deleteBoardService = async (userId: string, boardId: string) => {
+  await redis.del(`board:${boardId}`);
+
   const board = await prisma.board.findUnique({
     where: { id: boardId },
   });

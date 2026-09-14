@@ -1,6 +1,6 @@
 # Production Deployment Guide
 
-This guide provides step-by-step instructions to push your monorepo codebase to **GitHub** and deploy each service cleanly to **Vercel** and **Render**.
+This guide provides step-by-step instructions to push your monorepo codebase to **GitHub** and deploy each service cleanly to **Vercel** and **Render** with **Upstash Redis Pub/Sub** and **Google OAuth 2.0**.
 
 ---
 
@@ -11,9 +11,10 @@ This repository is structured as a **Turborepo Monorepo**:
 | Application / Package | Technology Stack | Deployment Target | Service Type |
 | :--- | :--- | :--- | :--- |
 | **`apps/frentend`** | Next.js 16, React 19, TailwindCSS | **Vercel** | Web Frontend |
-| **`apps/Backend`** | Express.js, Bun/Node, Pino | **Render** | Web Service (HTTP API) |
-| **`apps/websockets`** | `ws`, Bun/Node | **Render** | Web Service (Persistent WS) |
+| **`apps/Backend`** | Express.js, Bun/Node, Redis Caching, Google OAuth | **Render** | Web Service (HTTP API) |
+| **`apps/websockets`** | `ws`, Bun/Node, Redis Pub/Sub | **Render** | Web Service (Persistent WS Multi-Instance) |
 | **`packages/db`** | Prisma ORM, PostgreSQL | **Render Postgres / Neon / Supabase** | Database Layer |
+| **Redis Cache & Pub/Sub** | Upstash Redis / Redis Cloud | **Upstash** | Caching, Rate Limiting & WS Gateway |
 
 > ℹ️ **How Vercel & Render Catch Monorepo Services**: 
 > When you push your single GitHub repository, Vercel and Render locate the target app using **Root Directory** paths, custom **Start Commands**, and **Build Filters** (so each platform only builds its assigned app).
@@ -66,7 +67,7 @@ git status
 git add .
 
 # 3. Commit your changes with a descriptive message
-git commit -m "feat: setup project structure for Vercel and Render deployment"
+git commit -m "feat: setup Redis caching, Google OAuth, and deployment configs"
 
 # 4. Set default branch to main (if not already set)
 git branch -M main
@@ -80,24 +81,29 @@ git push -u origin main
 
 ---
 
-## 🗄️ Step 2: Database Provisioning (PostgreSQL)
+## 🗄️ Step 2: Database & Redis Provisioning
 
-You need a managed PostgreSQL database for Prisma (`packages/db`).
-
-### Option A: Render PostgreSQL / Neon / Supabase (Recommended)
+### 2.1 Managed PostgreSQL Database
 1. Create a PostgreSQL instance on [Neon](https://neon.tech), [Render](https://render.com), or [Supabase](https://supabase.com).
 2. Copy the connection string format:
    ```env
    DATABASE_URL="postgresql://user:password@ep-host.pooler.region.aws.neon.tech/dbname?sslmode=require"
    ```
 
-### 2.1 Push Database Schema
-To sync your Prisma schema to your remote PostgreSQL database:
+### 2.2 Push Database Schema
+To sync your Prisma schema (including `User.providerId` for Google OAuth) to your remote PostgreSQL database:
 
 ```bash
 cd packages/db
 bun db:push
 ```
+
+### 2.3 Upstash Redis Instance (Caching & Horizontal WebSockets)
+1. Create a free Redis database on [Upstash Redis Console](https://console.upstash.com).
+2. Copy the TLS connection string:
+   ```env
+   REDIS_URL="rediss://default:your_upstash_password@your-redis-endpoint.upstash.io:6379"
+   ```
 
 ---
 
@@ -128,7 +134,6 @@ You will deploy **two separate Web Services** on Render: `Backend` and `websocke
    - **Build Filter / Included Paths** *(Advanced)*:
      * Add 1st Included Path: `apps/Backend/**`
      * Click **+ Add Included Path** and add 2nd Path: `packages/db/**`
-     *(tells Render to only rebuild this service when backend or database code changes)*
    - **Instance Type**: Free or Starter.
 
 4. Add **Environment Variables** in Render Dashboard:
@@ -136,7 +141,11 @@ You will deploy **two separate Web Services** on Render: `Backend` and `websocke
    | :--- | :--- | :--- |
    | `NODE_ENV` | `production` | Production environment mode |
    | `DATABASE_URL` | `postgresql://...` | Your PostgreSQL connection string |
+   | `REDIS_URL` | `rediss://default:...@...upstash.io:6379` | Upstash Redis connection string |
    | `JWT_SECRET` | `your_super_secret_jwt_key_here` | Secret key for signing JWT tokens |
+   | `GOOGLE_CLIENT_ID` | `108...apps.googleusercontent.com` | Google OAuth Client ID |
+   | `GOOGLE_CLIENT_SECRET` | `GOCSPX-...` | Google OAuth Client Secret |
+   | `GOOGLE_CALLBACK_URL` | `https://klyro-backend-api.onrender.com/api/v1/auth/google/callback` | Google OAuth Callback URL |
    | `PORT` | `10000` *(Auto-assigned by Render)* | Port bound automatically |
 
 5. Click **Create Web Service**. Note your deployment URL:
@@ -171,6 +180,7 @@ You will deploy **two separate Web Services** on Render: `Backend` and `websocke
    | :--- | :--- | :--- |
    | `NODE_ENV` | `production` | Production mode |
    | `DATABASE_URL` | `postgresql://...` | Connection string |
+   | `REDIS_URL` | `rediss://default:...@...upstash.io:6379` | Upstash Redis for Pub/Sub horizontal multi-instance scaling |
 
 5. Click **Create Web Service**. Note your WebSocket service URL:
    `wss://klyro-websockets.onrender.com`
@@ -208,11 +218,16 @@ Make sure every service has its required keys populated in production:
 
 [apps/Backend] (Render Web Service Env)
 ├── DATABASE_URL=postgresql://<user>:<password>@<host>:<port>/<db>?sslmode=require
+├── REDIS_URL=rediss://default:<password>@<host>.upstash.io:6379
 ├── JWT_SECRET=<random-64-character-string>
+├── GOOGLE_CLIENT_ID=<your-google-client-id>.apps.googleusercontent.com
+├── GOOGLE_CLIENT_SECRET=<your-google-client-secret>
+├── GOOGLE_CALLBACK_URL=https://<your-render-backend>.onrender.com/api/v1/auth/google/callback
 └── PORT=10000 (Set dynamically by Render)
 
 [apps/websockets] (Render Web Service Env)
 ├── DATABASE_URL=postgresql://<user>:<password>@<host>:<port>/<db>?sslmode=require
+├── REDIS_URL=rediss://default:<password>@<host>.upstash.io:6379
 └── PORT=10000 (Set dynamically by Render)
 ```
 
@@ -220,7 +235,11 @@ Make sure every service has its required keys populated in production:
 
 ## 🛠️ Post-Deployment Verification & Checklist
 
-1. **CORS Configuration**:
+1. **Google OAuth 2.0 Authorized Redirect URIs**:
+   In Google Cloud Console under Credentials → Authorized redirect URIs, add:
+   `https://<your-render-backend>.onrender.com/api/v1/auth/google/callback`
+
+2. **CORS Configuration**:
    Ensure `apps/Backend/src/index.ts` allows requests from your Vercel URL. If CORS issues occur, specify allowed origins in Express:
    ```ts
    app.use(cors({
@@ -229,11 +248,15 @@ Make sure every service has its required keys populated in production:
    }));
    ```
 
-2. **WebSocket WSS Protocol**:
+3. **WebSocket WSS Protocol**:
    In production, Next.js served over HTTPS requires secure WebSockets (`wss://`). Ensure your frontend connects via `wss://` on Render.
 
-3. **Prisma Client Generation**:
-   If Prisma Client is missing during build, confirm that `npx prisma generate` runs as part of the build step before starting the application server.
+4. **Redis Connection & TLS**:
+   When using Upstash Redis in production, ensure `REDIS_URL` uses the secure `rediss://` scheme to automatically enable TLS.
 
-4. **Continuous Integration (CI/CD)**:
+5. **Optimistic UI Responsiveness**:
+   Card movements and list creation reflect instantly with 0ms perceived latency on the frontend, falling back smoothly if network calls fail.
+
+6. **Continuous Integration (CI/CD)**:
    Every time you `git push` to `main`, Vercel and Render will automatically rebuild and deploy your updated code!
+

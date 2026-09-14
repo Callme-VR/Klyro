@@ -27,6 +27,7 @@ export interface SocketUser {
 
 export default function UseBoardSocketConnections(boardId: string) {
   const socketRef = useRef<WebSocket | null>(null);
+  const currentUserIdRef = useRef<string | null>(null);
   const [connected, setConnected] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [onlineUsers, setOnlineUsers] = useState<SocketUser[]>([]);
@@ -42,6 +43,7 @@ export default function UseBoardSocketConnections(boardId: string) {
       socketRef.current.onerror = null;
       socketRef.current.close();
       socketRef.current = null;
+      currentUserIdRef.current = null;
     }
 
     let socketUrl = process.env.NEXT_PUBLIC_WS_URL;
@@ -97,11 +99,19 @@ export default function UseBoardSocketConnections(boardId: string) {
           const data: SocketMessage = JSON.parse(event.data);
 
           if (data.type === "INIT_STATE") {
+            currentUserIdRef.current = data.userId;
             setCurrentUserId(data.userId);
-            setOnlineUsers(data.users.map((id) => ({ userId: id })));
+            setOnlineUsers(
+              data.users
+                .filter((id) => id !== data.userId)
+                .map((id) => ({ userId: id }))
+            );
           }
 
           if (data.type === "USER_JOINED") {
+            // Ignore if the joining user is myself
+            if (data.userId === currentUserIdRef.current) return;
+
             setOnlineUsers((prev) => {
               if (prev.some((u) => u.userId === data.userId)) return prev;
 

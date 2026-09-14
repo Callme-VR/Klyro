@@ -1,9 +1,11 @@
+
 import { createServer } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import pino from "pino";
 import pretty from "pino-pretty";
 import { randomUUID } from "crypto";
 import { prisma } from "db/client";
+import Redis from "ioredis";
 
 // ============================================================
 // LOGGER
@@ -11,11 +13,11 @@ import { prisma } from "db/client";
 
 const logger = pino(
   {
-    base: undefined, // Removes PID and hostname
+    base: undefined,
   },
   pretty({
     colorize: true,
-    ignore: "time", // Hide timestamp
+    ignore: "time",
   }),
 );
 
@@ -23,7 +25,48 @@ const logger = pino(
 // CONFIGURATION
 // ============================================================
 
-const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 6001;
+const PORT = process.env.PORT
+  ? parseInt(process.env.PORT, 10)
+  : 6001;
+
+const REDIS_URL =
+  process.env.REDIS_URL || "redis://localhost:6379";
+
+// ============================================================
+// REDIS
+// ============================================================
+
+const redisPub = new Redis(REDIS_URL, {
+  maxRetriesPerRequest: null,
+});
+
+const redisSub = new Redis(REDIS_URL, {
+  maxRetriesPerRequest: null,
+});
+
+// Redis connection events
+redisPub.on("connect", () => {
+  logger.info("Redis publisher connected successfully");
+});
+
+redisSub.on("connect", () => {
+  logger.info("Redis subscriber connected successfully");
+});
+
+// Redis error events
+redisPub.on("error", (err) => {
+  logger.error(
+    { error: err.message },
+    "Redis Publisher Error",
+  );
+});
+
+redisSub.on("error", (err) => {
+  logger.error(
+    { error: err.message },
+    "Redis Subscriber Error",
+  );
+});
 
 // ============================================================
 // TYPES
@@ -38,15 +81,81 @@ interface User {
 // ROOMS
 // ============================================================
 
-// boardId -> Set of users connected to that board
+// boardId -> connected users
 const ROOMS = new Map<string, Set<User>>();
 
 // ============================================================
-// HTTP & WEBSOCKET SERVER (DUAL-STACK IPV4/IPV6)
+// REDIS SUBSCRIPTION
+// ============================================================
+
+redisSub.psubscribe("board:*", (err, count) => {
+  if (err) {
+    logger.error(
+      {
+        error: err.message,
+        channel: "board:*",
+      },
+      "Failed to subscribe to Redis channels",
+    );
+
+    return;
+  }
+
+  logger.info(
+    `Subscribed to ${count} Redis pattern(s) (board:*)`,
+  );
+});
+
+// ============================================================
+// BROADCAST REDIS EVENTS TO LOCAL SOCKETS
+// ============================================================
+
+redisSub.on(
+  "pmessage",
+  (_pattern, channel, message) => {
+    const boardId = channel.replace("board:", "");
+
+    const usersInRoom = ROOMS.get(boardId);
+
+    if (!usersInRoom) {
+      return;
+    }
+
+    try {
+      const parsedData = JSON.parse(message);
+
+      usersInRoom.forEach((user) => {
+        // Do not broadcast USER_JOINED back to the socket that just joined
+        if (
+          parsedData.type === "USER_JOINED" &&
+          user.userId === parsedData.userId
+        ) {
+          return;
+        }
+
+        if (user.socket.readyState === WebSocket.OPEN) {
+          user.socket.send(message);
+        }
+      });
+    } catch {
+      usersInRoom.forEach((user) => {
+        if (user.socket.readyState === WebSocket.OPEN) {
+          user.socket.send(message);
+        }
+      });
+    }
+  },
+);
+
+// ============================================================
+// HTTP + WEBSOCKET SERVER
 // ============================================================
 
 const server = createServer();
-const wss = new WebSocketServer({ server });
+
+const wss = new WebSocketServer({
+  server,
+});
 
 // ============================================================
 // CONNECTION HANDLER
@@ -55,17 +164,24 @@ const wss = new WebSocketServer({ server });
 wss.on("connection", (socket: WebSocket) => {
   logger.info("New WebSocket client connected");
 
-  // ----------------------------------------------------------
-  // MESSAGE HANDLER
-  // ----------------------------------------------------------
+  // Track which board this socket joined
+  let currentBoardId: string | null = null;
+  let currentUserId: string | null = null;
 
-  socket.on("message", (data) => {
+  // ==========================================================
+  // MESSAGE HANDLER
+  // ==========================================================
+
+  socket.on("message", async (data) => {
     let parsedData: any;
 
-    // Safely parse incoming JSON
+    // --------------------------------------------------------
+    // Parse JSON
+    // --------------------------------------------------------
+
     try {
       parsedData = JSON.parse(data.toString());
-    } catch (error) {
+    } catch {
       logger.error("Invalid JSON received from client");
 
       socket.send(
@@ -88,13 +204,20 @@ wss.on("connection", (socket: WebSocket) => {
     // ========================================================
 
     if (parsedData.type === "JOIN_BOARD") {
-      const boardId = parsedData.boardid;
+      const boardId = parsedData.boardId ?? parsedData.boardid;
 
-      if (!boardId) {
+      // ------------------------------------------------------
+      // Validate board ID
+      // ------------------------------------------------------
+
+      if (
+        typeof boardId !== "string" ||
+        boardId.trim().length === 0
+      ) {
         socket.send(
           JSON.stringify({
             type: "ERROR",
-            message: "boardid is required",
+            message: "boardId is required",
           }),
         );
 
@@ -102,7 +225,22 @@ wss.on("connection", (socket: WebSocket) => {
       }
 
       // ------------------------------------------------------
-      // Get existing room or create a new one
+      // Prevent joining multiple boards with same socket
+      // ------------------------------------------------------
+
+      if (currentBoardId) {
+        socket.send(
+          JSON.stringify({
+            type: "ERROR",
+            message: "Socket is already connected to a board",
+          }),
+        );
+
+        return;
+      }
+
+      // ------------------------------------------------------
+      // Create room if it doesn't exist
       // ------------------------------------------------------
 
       if (!ROOMS.has(boardId)) {
@@ -118,19 +256,12 @@ wss.on("connection", (socket: WebSocket) => {
       const newUserId = randomUUID();
 
       // ------------------------------------------------------
-      // Notify existing users that someone joined
+      // Get existing users BEFORE adding new user
       // ------------------------------------------------------
 
-      users.forEach((user) => {
-        if (user.socket.readyState === WebSocket.OPEN) {
-          user.socket.send(
-            JSON.stringify({
-              type: "USER_JOINED",
-              userId: newUserId,
-            }),
-          );
-        }
-      });
+      const existingUsers = Array.from(users).map(
+        (user) => user.userId,
+      );
 
       // ------------------------------------------------------
       // Add new user to room
@@ -143,13 +274,12 @@ wss.on("connection", (socket: WebSocket) => {
 
       users.add(newUser);
 
-      // ------------------------------------------------------
-      // Send current room state to new user
-      // ------------------------------------------------------
+      currentBoardId = boardId;
+      currentUserId = newUserId;
 
-      const existingUsers = Array.from(users)
-        .filter((user) => user.userId !== newUserId)
-        .map((user) => user.userId);
+      // ------------------------------------------------------
+      // Send initial state to new user
+      // ------------------------------------------------------
 
       socket.send(
         JSON.stringify({
@@ -159,6 +289,22 @@ wss.on("connection", (socket: WebSocket) => {
         }),
       );
 
+      // ------------------------------------------------------
+      // Notify existing users through Redis
+      // ------------------------------------------------------
+
+      await redisPub.publish(
+        `board:${boardId}`,
+        JSON.stringify({
+          type: "USER_JOINED",
+          userId: newUserId,
+        }),
+      );
+
+      // ------------------------------------------------------
+      // Logging
+      // ------------------------------------------------------
+
       logger.info(
         {
           boardId,
@@ -167,80 +313,90 @@ wss.on("connection", (socket: WebSocket) => {
         },
         "Client joined the board",
       );
+
+      return;
     }
+
+    // ========================================================
+    // UNKNOWN MESSAGE TYPE
+    // ========================================================
+
+    socket.send(
+      JSON.stringify({
+        type: "ERROR",
+        message: `Unknown message type: ${parsedData.type}`,
+      }),
+    );
   });
 
   // ==========================================================
   // CONNECTION CLOSED
   // ==========================================================
 
-  socket.on("close", () => {
+  socket.on("close", async () => {
     logger.info("WebSocket client disconnected");
 
     // --------------------------------------------------------
-    // Find the room and user associated with this socket
+    // If user never joined a board
     // --------------------------------------------------------
 
-    for (const [roomId, users] of ROOMS.entries()) {
-      let disconnectedUser: User | undefined;
-
-      for (const user of users) {
-        if (user.socket === socket) {
-          disconnectedUser = user;
-          break;
-        }
-      }
-
-      // ------------------------------------------------------
-      // User was not part of this room
-      // ------------------------------------------------------
-
-      if (!disconnectedUser) {
-        continue;
-      }
-
-      // ------------------------------------------------------
-      // Remove user from room
-      // ------------------------------------------------------
-
-      users.delete(disconnectedUser);
-
-      // ------------------------------------------------------
-      // Notify remaining users
-      // ------------------------------------------------------
-
-      users.forEach((user) => {
-        if (user.socket.readyState === WebSocket.OPEN) {
-          user.socket.send(
-            JSON.stringify({
-              type: "USER_LEAVE",
-              userId: disconnectedUser!.userId,
-            }),
-          );
-        }
-      });
-
-      // ------------------------------------------------------
-      // Delete empty room
-      // ------------------------------------------------------
-
-      if (users.size === 0) {
-        ROOMS.delete(roomId);
-      }
-
-      logger.info(
-        {
-          roomId,
-          userId: disconnectedUser.userId,
-          usersRemaining: users.size,
-        },
-        "Client left the board",
-      );
-
-      // A socket should only belong to one room,
-      // so we can stop searching.
-      break;
+    if (!currentBoardId || !currentUserId) {
+      return;
     }
+
+    const boardId = currentBoardId;
+    const userId = currentUserId;
+
+    const users = ROOMS.get(boardId);
+
+    if (!users) {
+      return;
+    }
+
+    // --------------------------------------------------------
+    // Remove user
+    // --------------------------------------------------------
+
+    for (const user of users) {
+      if (user.userId === userId) {
+        users.delete(user);
+        break;
+      }
+    }
+
+    // --------------------------------------------------------
+    // Notify remaining users through Redis
+    // --------------------------------------------------------
+
+    if (users.size > 0) {
+      await redisPub.publish(
+        `board:${boardId}`,
+        JSON.stringify({
+          type: "USER_LEAVE",
+          userId,
+        }),
+      );
+    }
+
+    // --------------------------------------------------------
+    // Delete empty room
+    // --------------------------------------------------------
+
+    if (users.size === 0) {
+      ROOMS.delete(boardId);
+    }
+
+    logger.info(
+      {
+        boardId,
+        userId,
+        usersRemaining: users.size,
+      },
+      "Client left the board",
+    );
+
+    currentBoardId = null;
+    currentUserId = null;
   });
 
   // ==========================================================
@@ -266,7 +422,7 @@ wss.on("error", (error: Error) => {
     {
       error: error.message,
     },
-    "Server level error occurred",
+    "WebSocket server-level error",
   );
 });
 
@@ -276,22 +432,34 @@ wss.on("error", (error: Error) => {
 
 async function main() {
   try {
-    // Test Prisma database connection
+    // --------------------------------------------------------
+    // Connect to database
+    // --------------------------------------------------------
+
     await prisma.$connect();
 
     logger.info("Database connected successfully");
 
+    // --------------------------------------------------------
+    // Start HTTP/WebSocket server
+    // --------------------------------------------------------
+
     server.listen(PORT, "0.0.0.0", () => {
       logger.info(
-        `WebSocket server successfully serving on ws://0.0.0.0:${PORT} (dual-stack IPv4/IPv6)`,
+        `WebSocket server running on ws://0.0.0.0:${PORT}`,
       );
     });
-  } catch (error: any) {
+  } catch (error) {
+    const message =
+      error instanceof Error
+        ? error.message
+        : String(error);
+
     logger.error(
       {
-        error: error.message,
+        error: message,
       },
-      "Failed to connect to the database",
+      "Failed to start server",
     );
 
     process.exit(1);
@@ -299,15 +467,51 @@ async function main() {
 }
 
 // ============================================================
+// GRACEFUL SHUTDOWN
+// ============================================================
+
+async function shutdown(signal: string) {
+  logger.info(`${signal} received. Shutting down...`);
+
+  try {
+    wss.close();
+    server.close();
+
+    await redisPub.quit();
+    await redisSub.quit();
+
+    await prisma.$disconnect();
+
+    logger.info("Server shutdown completed");
+
+    process.exit(0);
+  } catch (error) {
+    const message =
+      error instanceof Error
+        ? error.message
+        : String(error);
+
+    logger.error(
+      {
+        error: message,
+      },
+      "Error during shutdown",
+    );
+
+    process.exit(1);
+  }
+}
+
+process.on("SIGINT", () => {
+  void shutdown("SIGINT");
+});
+
+process.on("SIGTERM", () => {
+  void shutdown("SIGTERM");
+});
+
+// ============================================================
 // START SERVER
 // ============================================================
 
-main();
-
-
-
-
-
-
-
-
+void main();

@@ -1,6 +1,8 @@
 import { prisma } from "db/client";
 import type { SignupInput, SigninInput } from "../models/auth.Schemas";
 import { generateToken } from "../utils/jwt";
+import { redis } from "../utils/redis";
+import { getGoogleUser } from "../utils/googleAuthProvider";
 
 export const registerUser = async (input: SignupInput) => {
   const { email, password, name, avatarUrl } = input;
@@ -52,7 +54,7 @@ export const loginUser = async (input: SigninInput) => {
     },
   });
 
-  if (!user) {
+  if (!user || !user.passwordHash) {
     const error: any = new Error("Invalid email or password");
     error.statusCode = 401;
     throw error;
@@ -80,6 +82,11 @@ export const loginUser = async (input: SigninInput) => {
 };
 
 export const getUserById = async (userId: string) => {
+  const cachekey = `user:${userId}`;
+  const cacheUser = await redis.get(cachekey);
+  if (cacheUser) {
+    return JSON.parse(cacheUser);
+  }
   const user = await prisma.user.findUnique({
     where: {
       id: userId,
@@ -99,7 +106,56 @@ export const getUserById = async (userId: string) => {
     error.statusCode = 404;
     throw error;
   }
+  await redis.setex(cachekey, 300, JSON.stringify(user));
 
   return user;
 };
 
+export const handleGoogleauthservice = async (googleuser: {
+  id: string;
+  email: string;
+  name?: string;
+  picture?: string;
+}) => {
+  const { id, email, name, picture } = googleuser;
+
+  let user = await prisma.user.findFirst({
+    where: {
+      OR: [{ email }, { providerId: id }],
+    },
+  });
+
+  if (!user) {
+    user = await prisma.user.create({
+      data: {
+        email,
+        name: name || email.split("@")[0],
+        avatarUrl: picture || null,
+        provider: "GOOGLE",
+        providerId: id,
+        verified: true,
+      },
+    });
+  } else if (!user.providerId) {
+    user = await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        providerId: id,
+        avatarUrl: picture || user.avatarUrl,
+        verified: true,
+      },
+    });
+  }
+
+  const token = generateToken({ userId: user.id, email: user.email });
+
+  return {
+    user: {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      avatarUrl: user.avatarUrl,
+    },
+    token,
+  };
+};
