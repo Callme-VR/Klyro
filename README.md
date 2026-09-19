@@ -127,7 +127,10 @@ trello/
    PORT=5500
    JWT_SECRET="your-secure-jwt-secret"
    DATABASE_URL="postgresql://user:password@localhost:5432/trello_db?schema=public"
+   GEMINI_API_KEY="AIzaSy...your-gemini-api-key"
    ```
+
+   > 🤖 **InsightAI Intelligence Engine**: Uses `@google/genai` with model `gemini-3.5-flash-lite` to perform real-time organizational board health analysis, risk detection, and agile recommendations.
 
 4. **Generate Prisma Client**:
    ```bash

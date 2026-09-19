@@ -142,6 +142,7 @@ You will deploy **two separate Web Services** on Render: `Backend` and `websocke
    | `NODE_ENV` | `production` | Production environment mode |
    | `DATABASE_URL` | `postgresql://...` | Your PostgreSQL connection string |
    | `REDIS_URL` | `rediss://default:...@...upstash.io:6379` | Upstash Redis connection string |
+   | `GEMINI_API_KEY` | `AIzaSy...` | Google Gemini API Key (InsightAI Intelligence Engine) |
    | `FRONTEND_URL` | `https://your-app-name.vercel.app` | Vercel production frontend URL (used for Google OAuth redirects) |
    | `JWT_SECRET` | `your_super_secret_jwt_key_here` | Secret key for signing JWT tokens |
    | `GOOGLE_CLIENT_ID` | `108...apps.googleusercontent.com` | Google OAuth Client ID |
@@ -220,6 +221,7 @@ Make sure every service has its required keys populated in production:
 [apps/Backend] (Render Web Service Env)
 ├── DATABASE_URL=postgresql://<user>:<password>@<host>:<port>/<db>?sslmode=require
 ├── REDIS_URL=rediss://default:<password>@<host>.upstash.io:6379
+├── GEMINI_API_KEY=AIzaSy... (Strictly required for gemini-3.5-flash-lite InsightAI engine)
 ├── FRONTEND_URL=https://<your-app-name>.vercel.app
 ├── JWT_SECRET=<random-64-character-string>
 ├── GOOGLE_CLIENT_ID=<your-google-client-id>.apps.googleusercontent.com

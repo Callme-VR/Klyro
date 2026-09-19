@@ -55,21 +55,25 @@ apps/Backend/
 │   ├── test-fake-data.ts        # 17-Step E2E Fake Data Integration Test Suite
 │   ├── config/                  # Environment setup & server configurations
 │   ├── controllers/             # HTTP Controllers
+│   │   ├── ai.controller.ts     # InsightAI Executive Intelligence controller
 │   │   ├── auth.controller.ts   # Authentication endpoints (Signup, Signin, GetMe)
 │   │   ├── board.controller.ts  # Board, List, & Card CRUD controller
 │   │   └── org.controller.ts    # Organization & Member CRUD controller
 │   ├── middlewares/             # Express Middlewares
-│   │   └── auth.middleware.ts   # JWT Authentication Guard
+│   │   ├── auth.middleware.ts   # JWT Authentication Guard
+│   │   └── rateLimiter.middleware.ts # Rate limiting middleware
 │   ├── models/                  # Zod Input Validation Schemas
 │   │   ├── auth.Schemas.ts
 │   │   ├── board.Schemas.ts
 │   │   └── org.Schemas.ts
 │   ├── routes/                  # Express API Routers
 │   │   ├── index.ts             # Main API Router (/api/v1)
+│   │   ├── ai.routes.ts         # InsightAI router (/api/v1/ai/insight)
 │   │   ├── auth.routes.ts       # Auth router (/api/v1/auth)
 │   │   ├── board.routes.ts      # Board router (/api/v1/boards)
 │   │   └── org.routes.ts        # Organization router (/api/v1/organizations)
 │   ├── services/                # Core Business Logic & Database Queries
+│   │   ├── ai.service.ts        # InsightAI service (gemini-3.5-flash-lite)
 │   │   ├── auth.service.ts
 │   │   ├── board.service.ts
 │   │   └── org.service.ts
@@ -95,6 +99,7 @@ Create a `.env` file inside `apps/Backend/.env`:
 PORT=5500
 JWT_SECRET="your-secure-jwt-secret-key"
 DATABASE_URL="postgresql://neondb_owner:your_password@ep-autumn-feather.neon.tech/neondb?sslmode=require"
+GEMINI_API_KEY="AIzaSy...your-gemini-api-key"
 ```
 
 ### 2. Launching the Backend Server

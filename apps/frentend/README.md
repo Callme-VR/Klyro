@@ -33,7 +33,8 @@
 | :--- | :--- |
 | **Framework** | Next.js 16 (App Router) |
 | **UI Library** | React 19 |
-| **Styling** | Tailwind CSS v4 |
+| **Styling** | Tailwind CSS v4 & `DESIGN.md` Zapier Design System (`#ff4f00` orange, `#201515` deep ink) |
+| **AI Integration** | `InsightAISidebar` Executive Workspace Intelligence Engine |
 | **Default Port** | `3000` |
 | **API Endpoint** | `http://localhost:5500/api/v1` |
 | **WebSocket Endpoint** | `ws://localhost:6000` |
@@ -45,16 +46,28 @@
 ```text
 apps/frentend/
 ├── app/
-│   ├── globals.css      # Tailwind CSS v4 styles & global theme tokens
-│   ├── layout.tsx       # Root layout component
-│   └── page.tsx         # Main entry dashboard page
-├── public/              # Static public assets (images, SVGs, brand assets)
-│   └── assets/
-│       └── logo2.png    # Primary brand logo asset
-├── next.config.ts       # Next.js configuration
-├── postcss.config.mjs   # PostCSS configuration
-├── tsconfig.json        # TypeScript configuration
-└── package.json         # Frontend dependencies & scripts
+│   ├── (dashboard)/
+│   │   ├── boards/[boardId]/ # Board Canvas page with realtime WebSockets & InsightAI
+│   │   └── organizations/    # Organization workspaces & Member Management
+│   ├── globals.css           # Tailwind CSS v4 styles & global theme tokens
+│   ├── layout.tsx            # Root layout component
+│   └── page.tsx              # Landing page
+├── components/
+│   ├── ui/                   # Reusable UI primitives (Button, Input, Dialog, etc.)
+│   └── Webcomponents/        # Application feature components
+│       ├── InsightAISidebar.tsx # Executive Workspace Health & Intelligence Drawer
+│       ├── IssueDetailModal.tsx # Task Card details, activity & comments feed
+│       ├── InviteMemberModal.tsx# Team email invite generator
+│       └── BoardPresence.tsx    # Live WebSocket active user indicators
+├── services/                 # API service clients
+│   ├── ai-api.ts             # InsightAI API client (/ai/insight)
+│   ├── auth-api.ts           # Auth client
+│   ├── boards-api.ts         # Boards & Cards client
+│   └── org-api.ts            # Organization client
+├── DESIGN.md                 # Complete Zapier-inspired visual design system
+├── next.config.ts            # Next.js configuration
+├── tsconfig.json             # TypeScript configuration
+└── package.json              # Frontend dependencies & scripts
 ```
 
 ---
