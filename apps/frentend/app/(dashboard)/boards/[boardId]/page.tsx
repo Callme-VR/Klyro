@@ -15,6 +15,8 @@ import {
   Trash2,
   MessageSquare,
   GripVertical,
+  BrainCircuit,
+  Sparkles,
 } from "lucide-react";
 
 import { Board, Section, Issue } from "@/types/alltypes";
@@ -32,10 +34,21 @@ import {
   updateIssueApi,
   deleteIssueApi,
 } from "@/services/issue-api";
+import dynamic from "next/dynamic";
 import { calculateNewOrder } from "@/lib/order-utils";
-import { IssueDetailModal } from "@/components/Webcomponents/IssueDetailModal";
 import UseBoardSocketConnections from "@/hooks/useBoardSocket";
 import BoardPresence from "@/components/Webcomponents/BoardPresence";
+import { AICardGeneratorModal } from "@/components/Webcomponents/AICardGeneratorModal";
+
+const IssueDetailModal = dynamic(
+  () => import("@/components/Webcomponents/IssueDetailModal").then((mod) => mod.IssueDetailModal),
+  { ssr: false }
+);
+
+const InsightAISidebar = dynamic(
+  () => import("@/components/Webcomponents/InsightAISidebar").then((mod) => mod.InsightAISidebar),
+  { ssr: false }
+);
 
 export default function BoardCanvasPage() {
   const params = useParams();
@@ -48,6 +61,8 @@ export default function BoardCanvasPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isMounted, setIsMounted] = useState(false);
   const [selectedIssue, setSelectedIssue] = useState<Issue | null>(null);
+  const [isAIModalOpen, setIsAIModalOpen] = useState(false);
+
 
   useEffect(() => {
     setIsMounted(true);
@@ -61,16 +76,16 @@ export default function BoardCanvasPage() {
   const [activeSectionId, setActiveSectionId] = useState<string | null>(null);
   const [newIssueTitle, setNewIssueTitle] = useState("");
 
-  const fetchBoard = async () => {
+  const fetchBoard = async (showLoading = true) => {
     if (!boardId) return;
     try {
-      setIsLoading(true);
+      if (showLoading) setIsLoading(true);
       const data = await getBoardByIdApi(boardId);
       setBoard(data);
     } catch (err: any) {
       toast.error(err.message || "Failed to load board");
     } finally {
-      setIsLoading(false);
+      if (showLoading) setIsLoading(false);
     }
   };
 
@@ -367,12 +382,23 @@ export default function BoardCanvasPage() {
           </div>
         </div>
 
-        {/* Live Real-time WebSocket Presence */}
-        <BoardPresence
-          connected={connected}
-          onlineUsers={onlineUsers}
-          currentUserId={currentUserId}
-        />
+        {/* Right Header Actions */}
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setIsAIModalOpen(true)}
+            className="flex items-center gap-2 px-3.5 py-1.5 bg-[#ff4f00] hover:bg-[#e04500] text-[#fffefb] text-xs font-semibold rounded-[12px] border border-[#ff4f00]/30 shadow-md shadow-[#ff4f00]/20 active:scale-95 transition cursor-pointer"
+          >
+            <BrainCircuit className="h-4 w-4 text-[#fffefb]" />
+            <span>InsightAI Health</span>
+          </button>
+
+          {/* Live Real-time WebSocket Presence */}
+          <BoardPresence
+            connected={connected}
+            onlineUsers={onlineUsers}
+            currentUserId={currentUserId}
+          />
+        </div>
       </div>
 
       {/* DragDropContext Container */}
@@ -571,13 +597,24 @@ export default function BoardCanvasPage() {
         </Droppable>
       </DragDropContext>
 
-      <IssueDetailModal
-        issue={selectedIssue}
-        sections={board.sections || []}
-        isOpen={!!selectedIssue}
-        onClose={() => setSelectedIssue(null)}
-        onUpdate={fetchBoard}
-      />
+      {selectedIssue && (
+        <IssueDetailModal
+          issue={selectedIssue}
+          sections={board.sections || []}
+          isOpen={!!selectedIssue}
+          onClose={() => setSelectedIssue(null)}
+          onUpdate={() => fetchBoard(false)}
+        />
+      )}
+
+      {isAIModalOpen && board && (
+        <InsightAISidebar
+          orgId={board.organizationId}
+          boardId={board.id}
+          isOpen={isAIModalOpen}
+          onClose={() => setIsAIModalOpen(false)}
+        />
+      )}
     </div>
   );
 }

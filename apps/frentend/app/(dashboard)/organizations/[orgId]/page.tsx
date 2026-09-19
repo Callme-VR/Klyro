@@ -14,6 +14,7 @@ import {
   ExternalLink,
   Layers,
   Check,
+  BrainCircuit,
 } from "lucide-react";
 
 import { getOrgByIdApi, removeOrgMemberApi } from "@/services/org-api";
@@ -33,6 +34,12 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import InviteModal from "@/components/Webcomponents/InviteMemberModal";
+import dynamic from "next/dynamic";
+
+const InsightAISidebar = dynamic(
+  () => import("@/components/Webcomponents/InsightAISidebar").then((mod) => mod.InsightAISidebar),
+  { ssr: false }
+);
 
 const PRESET_COLORS = [
   { hex: "#ff4f00", name: "Zapier Orange" },
@@ -57,6 +64,7 @@ export default function OrganizationDetailsPage() {
 
   // Create Board State
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isInsightOpen, setIsInsightOpen] = useState(false);
   const [boardTitle, setBoardTitle] = useState("");
   const [selectedColor, setSelectedColor] = useState("#ff4f00");
   const [isCreating, setIsCreating] = useState(false);
@@ -181,6 +189,14 @@ export default function OrganizationDetailsPage() {
           </div>
 
           <div className="flex items-center gap-3">
+            <Button
+              onClick={() => setIsInsightOpen(true)}
+              className="border border-[#ff4f00]/40 bg-[#ff4f00]/10 text-[#ff4f00] hover:bg-[#ff4f00]/20 font-semibold rounded-[12px] cursor-pointer shadow-sm active:scale-95 transition-all"
+            >
+              <BrainCircuit className="h-4 w-4 mr-1.5 text-[#ff4f00]" />
+              InsightAI
+            </Button>
+
             <InviteModal orgId={org.id} orgname={org.name} />
 
             {/* Create Board Button Modal */}
@@ -418,6 +434,15 @@ export default function OrganizationDetailsPage() {
           </div>
         </div>
       )}
+
+      {isInsightOpen && org && (
+        <InsightAISidebar
+          orgId={org.id}
+          isOpen={isInsightOpen}
+          onClose={() => setIsInsightOpen(false)}
+        />
+      )}
     </div>
   );
 }
+

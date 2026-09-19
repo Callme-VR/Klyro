@@ -5,6 +5,7 @@ import boardRouter from "./board.routes";
 import { sectionRouter } from "./section.routes";
 import issuesRouter from "./issues.routes";
 import commentsRouter from "./comments.routes";
+import aiRouter from "./ai.routes";
 
 const ApiRouter = Router();
 
@@ -12,6 +13,7 @@ ApiRouter.use("/auth", authRouter);
 ApiRouter.use("/organizations", orgRouter);
 ApiRouter.use("/boards", boardRouter);
 ApiRouter.use("/sections", sectionRouter);
+ApiRouter.use("/ai", aiRouter);
 ApiRouter.use("/", issuesRouter);
 ApiRouter.use("/", commentsRouter);
 
