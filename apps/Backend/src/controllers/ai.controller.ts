@@ -21,13 +21,24 @@ export const getWorkspaceInsight = async (req: AuthenticatedRequest, res: Respon
     }
 
     const result = await getWorkspaceInsightService(userId, orgId, boardId);
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       data: result
     });
   } catch (error: any) {
     console.error("[InsightAI CONTROLLER] ❌ Error:", error);
-    res.status(500).json({
+
+    if (error.message && (error.message.includes("AI_EXECUTION_TIMEOUT") || error.message.includes("AIInsight timeout"))) {
+      return res.status(504).json({
+        success: false,
+        error: {
+          code: "GATEWAY_TIMEOUT",
+          message: "Insight generation taking too long. Please try again later.",
+        }
+      });
+    }
+
+    return res.status(500).json({
       success: false,
       error: { code: "INTERNAL_SERVER_ERROR", message: error.message || "Failed to generate workspace insight" }
     });

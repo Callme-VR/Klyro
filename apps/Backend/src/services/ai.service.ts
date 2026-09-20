@@ -1,6 +1,6 @@
 import { prisma } from "db/client";
 import { GoogleGenAI } from "@google/genai";
-
+import z from "zod";
 // Initialize Gemini SDK using process.env.GEMINI_API_KEY
 const apiKey = process.env.GEMINI_API_KEY;
 if (!apiKey) {
@@ -19,6 +19,17 @@ export interface WorkspaceInsightResult {
   bottlenecks: string[];
   recommendations: string[];
 }
+
+// --------------------------------------------------------------------------------
+// sandboxing ai layer-1
+// --------------------------------------------------------------------------------
+const WorkspaceInsightSchema = z.object({
+  healthScore: z.number().min(0).max(100).default(80).describe("Workspace health score between 0 and 100"),
+  summary: z.string().default("").describe("2-3 concise sentences summarizing workspace health and active work"),
+  bottlenecks: z.array(z.string()).default([]).describe("Array of 1-2 specific bottlenecks or risks detected based on stats"),
+  recommendations: z.array(z.string()).default([]).describe("Array of 2-3 short, high-impact actionable next steps for the team"),
+});
+
 
 /**
  * InsightAI Service: Analyzes Organization & Board metadata to produce executive health intelligence
@@ -103,7 +114,7 @@ export async function getWorkspaceInsightService(
 
   // 2. Build Gemini AI prompt with real workspace metrics
   const statsPayload = {
-    orgName: org.name,
+    orgName: org.name.slice(0, 100),
     totalBoards,
     totalMembers,
     totalIssues,
@@ -126,7 +137,15 @@ Strict JSON Output Schema:
   console.log(`[InsightAI SERVICE] ⏳ Calling Gemini API (gemini-3.5-flash-lite)...`);
   const aiStartTime = Date.now();
 
-  const response = await ai.models.generateContent({
+  const TIMEOUT_MS = 8000;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    setTimeout(
+      () => reject(new Error(`AI_EXECUTION_TIMEOUT: Gemini API call exceeded ${TIMEOUT_MS}ms`)),
+      TIMEOUT_MS
+    );
+  });
+
+  const aiGenerationPromise = ai.models.generateContent({
     model: "gemini-3.5-flash-lite",
     contents: `${systemPrompt}\n\nWorkspace Statistics:\n${JSON.stringify(statsPayload, null, 2)}`,
     config: {
@@ -135,25 +154,27 @@ Strict JSON Output Schema:
     },
   });
 
-  const aiDuration = Date.now() - aiStartTime;
-  console.log(`[InsightAI SERVICE] ✅ Gemini API responded in ${aiDuration}ms`);
-
+  const response: any = await Promise.race([aiGenerationPromise, timeoutPromise]);
   const responseText = response.text;
   if (!responseText) throw new Error("Failed to receive insight response from Gemini AI");
 
-  const parsed = JSON.parse(responseText);
+  const aiDuration = Date.now() - aiStartTime;
+  console.log(`[InsightAI SERVICE] ✅ Gemini API responded in ${aiDuration}ms`);
+
+  const rawParsed = JSON.parse(responseText);
+  const validated = WorkspaceInsightSchema.parse(rawParsed);
 
   const durationTotal = Date.now() - startTime;
-  console.log(`[InsightAI SERVICE] 🎉 Insight Report generated in ${durationTotal}ms total. Health Score: ${parsed.healthScore}`);
+  console.log(`[InsightAI SERVICE] 🎉 Insight Report generated in ${durationTotal}ms total. Health Score: ${validated.healthScore}`);
 
   return {
     orgName: org.name,
     totalBoards,
     totalMembers,
     totalIssues,
-    healthScore: typeof parsed.healthScore === "number" ? parsed.healthScore : 85,
-    summary: parsed.summary || `Organization ${org.name} currently has ${totalBoards} boards and ${totalMembers} members working on ${totalIssues} tasks.`,
-    bottlenecks: Array.isArray(parsed.bottlenecks) ? parsed.bottlenecks : [],
-    recommendations: Array.isArray(parsed.recommendations) ? parsed.recommendations : [],
+    healthScore: validated.healthScore,
+    summary: validated.summary || `Organization ${org.name} currently has ${totalBoards} boards and ${totalMembers} members working on ${totalIssues} tasks.`,
+    bottlenecks: validated.bottlenecks,
+    recommendations: validated.recommendations,
   };
 }
